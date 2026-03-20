@@ -1,4 +1,4 @@
-const STYLE_PREFIX = `Flat geometric modern illustration style. Clean vector shapes, bold solid colors on dark navy background, minimal detail, abstract and stylized. No photorealism. No text or words in the image. LinkedIn post graphic, square 1:1 format.`;
+const STYLE_PREFIX = `Generate an image. Flat geometric modern illustration style. Clean vector shapes, bold solid colors on dark navy background, minimal detail, abstract and stylized. No photorealism. No text or words in the image. Square format.`;
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -19,12 +19,13 @@ module.exports = async function handler(req, res) {
 
     const fullPrompt = `${STYLE_PREFIX}\n\nSubject: ${prompt}`;
 
-    // Try models in order: Nano Banana 2, Nano Banana, older exp
     const models = [
       'gemini-2.0-flash-exp-image-generation',
       'gemini-2.5-flash-image',
       'gemini-2.0-flash-exp',
     ];
+
+    const errors = [];
 
     for (const model of models) {
       try {
@@ -42,7 +43,10 @@ module.exports = async function handler(req, res) {
 
         const data = await response.json();
 
-        if (data.error) continue;
+        if (data.error) {
+          errors.push(`${model}: ${data.error.message}`);
+          continue;
+        }
 
         const candidates = data.candidates || [];
         for (const candidate of candidates) {
@@ -52,17 +56,22 @@ module.exports = async function handler(req, res) {
               return res.status(200).json({
                 image: part.inlineData.data,
                 mimeType: part.inlineData.mimeType,
+                model: model,
               });
             }
           }
         }
-      } catch {
-        continue;
+
+        // Model responded but no image
+        errors.push(`${model}: responded with text only, no image generated`);
+      } catch (e) {
+        errors.push(`${model}: ${e.message}`);
       }
     }
 
     return res.status(500).json({
-      error: 'No image returned from any model. Try a more descriptive visual prompt.',
+      error: 'No image returned from any model.',
+      details: errors,
     });
   } catch (err) {
     return res.status(500).json({ error: err.message || 'Internal error' });
