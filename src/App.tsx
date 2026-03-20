@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react'
-import { Drafter } from './components/Drafter'
-import { Illustrator } from './components/Illustrator'
-import { Publisher } from './components/Publisher'
-import { Preview } from './components/Preview'
+import { Drafter } from './components/Drafter.tsx'
+import { Illustrator } from './components/Illustrator.tsx'
+import { Publisher } from './components/Publisher.tsx'
+import { Preview } from './components/Preview.tsx'
 
 export interface PostDraft {
   title: string
