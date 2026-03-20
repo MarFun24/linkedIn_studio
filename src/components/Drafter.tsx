@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { PostDraft } from '../App'
+import type { PostDraft } from '../App.tsx'
 
 const mono: React.CSSProperties = { fontFamily: 'DM Mono, monospace' }
 const sora: React.CSSProperties = { fontFamily: 'Sora, sans-serif' }
@@ -168,4 +168,3 @@ function Spinner() {
     </svg>
   )
 }
-
