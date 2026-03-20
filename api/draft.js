@@ -24,32 +24,21 @@ OUTPUT FORMAT - respond with ONLY valid JSON, no markdown fences, no extra text:
   "hashtags": "3-5 hashtags"
 }`;
 
-export const config = { runtime: 'edge' };
-
-export default async function handler(request) {
-  if (request.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: { 'Content-Type': 'application/json' },
-    });
+module.exports = async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return new Response(JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
   }
 
   try {
-    const { topic, pillar } = await request.json();
+    const { topic, pillar } = req.body;
 
     if (!topic?.trim()) {
-      return new Response(JSON.stringify({ error: 'Topic is required' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return res.status(400).json({ error: 'Topic is required' });
     }
 
     const userMsg = pillar
@@ -73,9 +62,9 @@ export default async function handler(request) {
 
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
-      return new Response(JSON.stringify({
+      return res.status(response.status).json({
         error: errData?.error?.message || `Anthropic API returned ${response.status}`,
-      }), { status: response.status, headers: { 'Content-Type': 'application/json' } });
+      });
     }
 
     const data = await response.json();
@@ -84,20 +73,11 @@ export default async function handler(request) {
 
     try {
       const parsed = JSON.parse(clean);
-      return new Response(JSON.stringify(parsed), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return res.status(200).json(parsed);
     } catch {
-      return new Response(JSON.stringify({ error: 'Failed to parse draft JSON', raw: clean }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return res.status(500).json({ error: 'Failed to parse draft JSON', raw: clean });
     }
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message || 'Internal error' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return res.status(500).json({ error: err.message || 'Internal error' });
   }
-}
+};
