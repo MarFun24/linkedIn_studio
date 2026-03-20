@@ -1,28 +1,20 @@
 const NOTION_DB_ID = '2851ab64-5104-807c-a391-000b1f0400ee';
 
-export const config = { runtime: 'edge' };
-
-export default async function handler(request) {
-  if (request.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405, headers: { 'Content-Type': 'application/json' },
-    });
+module.exports = async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return new Response(JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured' }), {
-      status: 500, headers: { 'Content-Type': 'application/json' },
-    });
+    return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
   }
 
   try {
-    const { draft } = await request.json();
+    const { draft } = req.body;
 
     if (!draft?.title) {
-      return new Response(JSON.stringify({ error: 'Draft is required' }), {
-        status: 400, headers: { 'Content-Type': 'application/json' },
-      });
+      return res.status(400).json({ error: 'Draft is required' });
     }
 
     const contentType = draft.pillar === 'Industry Takes' ? 'News Response' : 'LinkedIn Post';
@@ -91,9 +83,9 @@ After creating the page, respond with ONLY a JSON object in this format (no mark
 
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
-      return new Response(JSON.stringify({
+      return res.status(response.status).json({
         error: errData?.error?.message || `Anthropic API returned ${response.status}`,
-      }), { status: response.status, headers: { 'Content-Type': 'application/json' } });
+      });
     }
 
     const data = await response.json();
@@ -114,19 +106,15 @@ After creating the page, respond with ONLY a JSON object in this format (no mark
     try {
       const clean = textParts.replace(/```json\s?|```/g, '').trim();
       const parsed = JSON.parse(clean);
-      return new Response(JSON.stringify(parsed), {
-        status: 200, headers: { 'Content-Type': 'application/json' },
-      });
+      return res.status(200).json(parsed);
     } catch {
-      return new Response(JSON.stringify({
+      return res.status(200).json({
         success: true,
         url: urlMatch?.[0] || null,
         message: textParts || 'Published to Notion',
-      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      });
     }
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message || 'Internal error' }), {
-      status: 500, headers: { 'Content-Type': 'application/json' },
-    });
+    return res.status(500).json({ error: err.message || 'Internal error' });
   }
-}
+};
