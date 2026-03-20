@@ -1,25 +1,33 @@
 const STYLE_PREFIX = `Flat geometric modern illustration style. Clean vector shapes, bold solid colors on dark navy background, minimal detail, abstract and stylized. No photorealism. No text or words in the image. LinkedIn post graphic, square 1:1 format.`;
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+export const config = { runtime: 'edge' };
+
+export default async function handler(request) {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405, headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
+    return new Response(JSON.stringify({ error: 'GEMINI_API_KEY not configured' }), {
+      status: 500, headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   try {
-    const { prompt } = req.body;
+    const { prompt } = await request.json();
 
     if (!prompt?.trim()) {
-      return res.status(400).json({ error: 'Prompt is required' });
+      return new Response(JSON.stringify({ error: 'Prompt is required' }), {
+        status: 400, headers: { 'Content-Type': 'application/json' },
+      });
     }
 
     const fullPrompt = `${STYLE_PREFIX}\n\nSubject: ${prompt}`;
 
-    // Try Gemini native image generation first
+    // Try Gemini native image generation
     const geminiResp = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${apiKey}`,
       {
@@ -34,40 +42,29 @@ export default async function handler(req, res) {
 
     const geminiData = await geminiResp.json();
 
-    if (geminiData.error) {
-      // Fallback to Imagen 3
-      return await tryImagen(apiKey, fullPrompt, res);
-    }
-
-    const candidates = geminiData.candidates || [];
-    for (const candidate of candidates) {
-      const parts = candidate.content?.parts || [];
-      for (const part of parts) {
-        if (part.inlineData) {
-          return res.status(200).json({
-            image: part.inlineData.data,
-            mimeType: part.inlineData.mimeType,
-          });
+    if (!geminiData.error) {
+      const candidates = geminiData.candidates || [];
+      for (const candidate of candidates) {
+        const parts = candidate.content?.parts || [];
+        for (const part of parts) {
+          if (part.inlineData) {
+            return new Response(JSON.stringify({
+              image: part.inlineData.data,
+              mimeType: part.inlineData.mimeType,
+            }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+          }
         }
       }
     }
 
-    // No image in response, try Imagen fallback
-    return await tryImagen(apiKey, fullPrompt, res);
-  } catch (err) {
-    return res.status(500).json({ error: err.message || 'Internal error' });
-  }
-}
-
-async function tryImagen(apiKey, prompt, res) {
-  try {
+    // Fallback to Imagen 3
     const imagenResp = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          instances: [{ prompt }],
+          instances: [{ prompt: fullPrompt }],
           parameters: { aspectRatio: '1:1', sampleCount: 1 },
         }),
       }
@@ -76,19 +73,25 @@ async function tryImagen(apiKey, prompt, res) {
     const imagenData = await imagenResp.json();
 
     if (imagenData.error) {
-      return res.status(500).json({ error: imagenData.error.message || 'Imagen API error' });
+      return new Response(JSON.stringify({ error: imagenData.error.message || 'Image generation failed' }), {
+        status: 500, headers: { 'Content-Type': 'application/json' },
+      });
     }
 
     const predictions = imagenData.predictions || [];
     if (predictions.length > 0 && predictions[0].bytesBase64Encoded) {
-      return res.status(200).json({
+      return new Response(JSON.stringify({
         image: predictions[0].bytesBase64Encoded,
         mimeType: predictions[0].mimeType || 'image/png',
-      });
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
-    return res.status(500).json({ error: 'No image returned. Try rephrasing the prompt.' });
+    return new Response(JSON.stringify({ error: 'No image returned. Try rephrasing the prompt.' }), {
+      status: 500, headers: { 'Content-Type': 'application/json' },
+    });
   } catch (err) {
-    return res.status(500).json({ error: err.message || 'Imagen fallback failed' });
+    return new Response(JSON.stringify({ error: err.message || 'Internal error' }), {
+      status: 500, headers: { 'Content-Type': 'application/json' },
+    });
   }
 }
