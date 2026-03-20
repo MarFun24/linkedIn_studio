@@ -1,20 +1,28 @@
 const NOTION_DB_ID = '2851ab64-5104-807c-a391-000b1f0400ee';
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+export const config = { runtime: 'edge' };
+
+export default async function handler(request) {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405, headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
+    return new Response(JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured' }), {
+      status: 500, headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   try {
-    const { draft } = req.body;
+    const { draft } = await request.json();
 
     if (!draft?.title) {
-      return res.status(400).json({ error: 'Draft is required' });
+      return new Response(JSON.stringify({ error: 'Draft is required' }), {
+        status: 400, headers: { 'Content-Type': 'application/json' },
+      });
     }
 
     const contentType = draft.pillar === 'Industry Takes' ? 'News Response' : 'LinkedIn Post';
@@ -83,14 +91,13 @@ After creating the page, respond with ONLY a JSON object in this format (no mark
 
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
-      return res.status(response.status).json({
+      return new Response(JSON.stringify({
         error: errData?.error?.message || `Anthropic API returned ${response.status}`,
-      });
+      }), { status: response.status, headers: { 'Content-Type': 'application/json' } });
     }
 
     const data = await response.json();
 
-    // Extract text and tool results
     const textParts = data.content
       ?.filter((c) => c.type === 'text')
       .map((c) => c.text)
@@ -101,24 +108,25 @@ After creating the page, respond with ONLY a JSON object in this format (no mark
       .map((c) => c.content?.[0]?.text || '')
       .join('\n') || '';
 
-    // Try to find a Notion URL in the response
     const allText = textParts + '\n' + toolResults;
     const urlMatch = allText.match(/https:\/\/(?:www\.)?notion\.so\/[^\s)"]+/);
 
-    // Try to parse JSON from text response
     try {
       const clean = textParts.replace(/```json\s?|```/g, '').trim();
       const parsed = JSON.parse(clean);
-      return res.status(200).json(parsed);
+      return new Response(JSON.stringify(parsed), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
     } catch {
-      // Fallback: return what we have
-      return res.status(200).json({
+      return new Response(JSON.stringify({
         success: true,
         url: urlMatch?.[0] || null,
         message: textParts || 'Published to Notion',
-      });
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
   } catch (err) {
-    return res.status(500).json({ error: err.message || 'Internal error' });
+    return new Response(JSON.stringify({ error: err.message || 'Internal error' }), {
+      status: 500, headers: { 'Content-Type': 'application/json' },
+    });
   }
 }
