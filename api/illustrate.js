@@ -19,39 +19,51 @@ module.exports = async function handler(req, res) {
 
     const fullPrompt = `${STYLE_PREFIX}\n\nSubject: ${prompt}`;
 
-    // Nano Banana (gemini-2.5-flash-preview-image-generation)
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-image-generation:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: fullPrompt }] }],
-          generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
-        }),
-      }
-    );
+    // Try models in order: Nano Banana 2, Nano Banana, older exp
+    const models = [
+      'gemini-2.0-flash-exp-image-generation',
+      'gemini-2.5-flash-image',
+      'gemini-2.0-flash-exp',
+    ];
 
-    const data = await response.json();
+    for (const model of models) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: fullPrompt }] }],
+              generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+            }),
+          }
+        );
 
-    if (data.error) {
-      return res.status(500).json({ error: data.error.message || 'Gemini API error' });
-    }
+        const data = await response.json();
 
-    const candidates = data.candidates || [];
-    for (const candidate of candidates) {
-      const parts = candidate.content?.parts || [];
-      for (const part of parts) {
-        if (part.inlineData) {
-          return res.status(200).json({
-            image: part.inlineData.data,
-            mimeType: part.inlineData.mimeType,
-          });
+        if (data.error) continue;
+
+        const candidates = data.candidates || [];
+        for (const candidate of candidates) {
+          const parts = candidate.content?.parts || [];
+          for (const part of parts) {
+            if (part.inlineData) {
+              return res.status(200).json({
+                image: part.inlineData.data,
+                mimeType: part.inlineData.mimeType,
+              });
+            }
+          }
         }
+      } catch {
+        continue;
       }
     }
 
-    return res.status(500).json({ error: 'No image returned. Gemini may have generated text only. Try a more visual prompt.' });
+    return res.status(500).json({
+      error: 'No image returned from any model. Try a more descriptive visual prompt.',
+    });
   } catch (err) {
     return res.status(500).json({ error: err.message || 'Internal error' });
   }
